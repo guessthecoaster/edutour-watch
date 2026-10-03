@@ -1,0 +1,38 @@
+name: EDUTour watch
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check attendee count
+        env:
+          TOPIC: ${{ secrets.NTFY_TOPIC }}
+          URL: https://connectplus.iaapa.org/event/iaapa-expo-2026/planning/UGxhbm5pbmdfNDUzMDMwNw==
+        run: |
+          TEXT=$(curl -sL -A "Mozilla/5.0" "$URL" | sed -e 's/<!--[^>]*-->//g' -e 's/<[^>]*>/ /g')
+          COUNT=$(echo "$TEXT" | grep -oE 'See all *\( *[0-9]+ *\)' | head -1 | grep -oE '[0-9]+')
+          echo "Attendee count: ${COUNT:-not found}"
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            curl -s -H "Title: EDUTour watcher test" \
+              -d "Watcher works. Current count: ${COUNT:-NOT FOUND}" \
+              "https://ntfy.sh/$TOPIC"
+            exit 0
+          fi
+
+          if [ -z "$COUNT" ]; then
+            echo "Could not read count"
+            exit 1
+          fi
+
+          if [ "$COUNT" -lt 100 ]; then
+            curl -s -H "Title: EDUTour seat may be open" \
+              -H "Priority: urgent" -H "Click: $URL" \
+              -d "Attendee count dropped to $COUNT. Book now in your registration." \
+              "https://ntfy.sh/$TOPIC"
+          fi
